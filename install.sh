@@ -420,12 +420,17 @@ chmod +x /etc/letsencrypt/renewal-hooks/deploy/20-cc-reload.sh
 # ---------------------------------------------------------------- services
 step "enabling services"
 systemctl daemon-reload    # pick up the timer/service units the copy loop just installed
-systemctl enable --now php8.3-fpm nginx nftables >/dev/null 2>&1 || true
+systemctl enable php8.3-fpm nginx nftables fail2ban >/dev/null 2>&1 || true
 # The freeswitch package's own postinst starts the unit before its user exists, so the
 # unit is already in a failed state ("start request repeated too quickly") by the time
 # we get here; systemd then refuses further starts until the failure is cleared.
 systemctl reset-failed kamailio freeswitch fail2ban >/dev/null 2>&1 || true
-systemctl enable --now fail2ban >/dev/null 2>&1 || true
+# RESTART, not `enable --now`: on a re-run these units are already active, so --now is a
+# no-op and the daemon keeps serving its old config. That is how a fail2ban whose jails
+# had failed to load stayed stuck with only the distro sshd jail even after the config
+# on disk had been fixed — it never re-read it.
+systemctl restart php8.3-fpm >/dev/null 2>&1 || warn "php8.3-fpm did not restart — check: journalctl -u php8.3-fpm"
+systemctl restart fail2ban  >/dev/null 2>&1 || warn "fail2ban did not restart — check: journalctl -u fail2ban"
 for svc in kamailio freeswitch; do systemctl enable "$svc" >/dev/null 2>&1 || true; systemctl restart "$svc" >/dev/null 2>&1 || warn "$svc did not start — check: journalctl -u $svc"; done
 for t in dpswitch-scheduler.timer dp-stats.timer; do systemctl enable --now "$t" >/dev/null 2>&1 || warn "$t did not enable — check: systemctl status $t"; done
 systemctl reload nginx 2>/dev/null || systemctl restart nginx || true
