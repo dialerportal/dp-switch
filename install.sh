@@ -291,6 +291,12 @@ sudo -u www-data HOME=/tmp COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev 
 # db:seed must NOT be swallowed — a silent failure = no admin account on a green banner.
 sudo -u www-data HOME=/tmp php8.3 artisan db:seed --class=AdminUserSeeder --force || die "admin seed failed — check DB grants / users table"
 sudo -u www-data HOME=/tmp php8.3 artisan config:cache -q
+# The 'auth' log channel is a daily driver, so it writes storage/logs/auth-YYYY-MM-DD.log
+# only once something actually authenticates. fail2ban resolves its logpath GLOB at
+# startup and aborts the whole jail set with "Have not found any log file for
+# dpswitch-auth jail" if nothing matches — which silently left every portal/SIP jail
+# unloaded while the install reported success. Seed today's file so the glob resolves.
+install -o www-data -g www-data -m 0640 /dev/null "$APP_DIR/storage/logs/auth-$(date +%F).log"
 ok "portal deployed"
 
 # ---------------------------------------------------------------- server configs
@@ -323,9 +329,19 @@ rm -f /etc/freeswitch/sip_profiles/internal-ipv6.xml /etc/freeswitch/sip_profile
 # Remove vanilla sample dialplans so a portal/xml_curl outage cannot fall through
 # to echo/voicemail/conference; our safe default.xml (shipped above) stays (M1).
 rm -rf /etc/freeswitch/dialplan/default /etc/freeswitch/dialplan/public /etc/freeswitch/dialplan/skinny-patterns
-# Set our codec list in the vanilla vars.xml (B3-codec).
+# Vanilla FreeSWITCH ships a demo user directory (1000-1019, all sharing
+# $${default_password}) and a sample carrier gateway pointing at example.com. The
+# SBC never uses either — Kamailio authenticates at the edge against
+# switch.customer_sip_account, and the internal profile is loopback-only with
+# auth-calls=false — but leaving 20 accounts whose password is "1234" on a box
+# that terminates PSTN calls is one config slip away from toll fraud. Delete them,
+# and leave no usable default_password behind for anything that reads vars.xml.
+rm -rf /etc/freeswitch/directory/default /etc/freeswitch/directory/default.xml
+rm -rf /etc/freeswitch/sip_profiles/external /etc/freeswitch/sip_profiles/external-ipv6
+# Set our codec list in the vanilla vars.xml (B3-codec) and neutralise the demo password.
 if [ -f /etc/freeswitch/vars.xml ]; then
     sed -i -E 's|(global_codec_prefs=)[^"]*|\1PCMU,PCMA,OPUS,G722,G729,GSM|; s|(outbound_codec_prefs=)[^"]*|\1PCMU,PCMA,OPUS,G722,G729,GSM|' /etc/freeswitch/vars.xml
+    sed -i -E "s|(default_password=)[^\"]*|\1$(gen 16)|" /etc/freeswitch/vars.xml
 fi
 chown -R freeswitch:freeswitch /etc/freeswitch 2>/dev/null || true
 
@@ -404,10 +420,42 @@ chmod +x /etc/letsencrypt/renewal-hooks/deploy/20-cc-reload.sh
 # ---------------------------------------------------------------- services
 step "enabling services"
 systemctl daemon-reload    # pick up the timer/service units the copy loop just installed
-systemctl enable --now php8.3-fpm nginx fail2ban nftables >/dev/null 2>&1 || true
+systemctl enable --now php8.3-fpm nginx nftables >/dev/null 2>&1 || true
+# The freeswitch package's own postinst starts the unit before its user exists, so the
+# unit is already in a failed state ("start request repeated too quickly") by the time
+# we get here; systemd then refuses further starts until the failure is cleared.
+systemctl reset-failed kamailio freeswitch fail2ban >/dev/null 2>&1 || true
+systemctl enable --now fail2ban >/dev/null 2>&1 || true
 for svc in kamailio freeswitch; do systemctl enable "$svc" >/dev/null 2>&1 || true; systemctl restart "$svc" >/dev/null 2>&1 || warn "$svc did not start — check: journalctl -u $svc"; done
 for t in dpswitch-scheduler.timer dp-stats.timer; do systemctl enable --now "$t" >/dev/null 2>&1 || warn "$t did not enable — check: systemctl status $t"; done
 systemctl reload nginx 2>/dev/null || systemctl restart nginx || true
+
+# ---------------------------------------------------------------- verify
+# Everything above can "succeed" while leaving the box non-operational: a jail whose
+# logpath glob is empty is skipped, a SIP daemon can die right after restart. Check the
+# things that actually matter and say so out loud, rather than printing a green banner.
+step "verifying"
+FAILED=0
+for svc in nginx php8.3-fpm mariadb kamailio freeswitch fail2ban nftables; do
+    systemctl is-active --quiet "$svc" || { warn "$svc is NOT running — journalctl -u $svc"; FAILED=1; }
+done
+# fail2ban silently drops jails it cannot read a log for; -t surfaces the real reason.
+if ! fail2ban-client -t >/dev/null 2>&1; then
+    warn "fail2ban config test failed — jails may not be active. Detail:"
+    fail2ban-client -t 2>&1 | grep -iE "error|warn" | tail -5
+    FAILED=1
+fi
+for jail in dpswitch-auth dpswitch-probe dpsip-auth dpsip-scanner; do
+    fail2ban-client status "$jail" >/dev/null 2>&1 || { warn "fail2ban jail '$jail' is not loaded"; FAILED=1; }
+done
+# Kamailio must own the public SIP edge, FreeSWITCH must answer on the ESL loopback.
+ss -lnu 2>/dev/null | grep -q ":5060 " || { warn "nothing is listening on udp/5060 — Kamailio did not bind the SIP edge"; FAILED=1; }
+ss -lnt 2>/dev/null | grep -q "127.0.0.1:8021" || { warn "FreeSWITCH ESL is not listening on 127.0.0.1:8021"; FAILED=1; }
+# The dialplan endpoint is the whole call path: no XML here means no call ever routes.
+DP_CODE="$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8080/switch/dialplan \
+    -H "X-Switch-Secret: ${SWITCH_SECRET}" -d 'Caller-Destination-Number=10000000000' 2>/dev/null || echo 000)"
+[ "$DP_CODE" = 200 ] || { warn "switch dialplan endpoint returned HTTP $DP_CODE (expected 200) — FreeSWITCH cannot route calls"; FAILED=1; }
+[ "$FAILED" = 0 ] && ok "all services, jails, and the switch API verified" || warn "install finished with the problems above — fix them before taking traffic"
 
 # ---------------------------------------------------------------- done
 echo; c "1;32" "============================================================"

@@ -4,5 +4,13 @@
       <param name="gateway-url" value="http://127.0.0.1:8080/switch/dialplan" bindings="dialplan"/>
       <param name="method" value="POST"/>
     </binding>
+    <!-- The portal is the only source of SIP accounts; the vanilla demo directory is
+         deleted at install time. Without this binding FreeSWITCH silently falls back
+         to static XML, /switch/directory is never called, and the dpsip-scanner jail
+         (which bans on its "sip directory miss" lines) can never fire. -->
+    <binding name="directory">
+      <param name="gateway-url" value="http://127.0.0.1:8080/switch/directory" bindings="directory"/>
+      <param name="method" value="POST"/>
+    </binding>
   </bindings>
 </configuration>
