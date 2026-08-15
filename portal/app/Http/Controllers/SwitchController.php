@@ -550,9 +550,9 @@ XML;
         // could otherwise open unlimited simultaneous calls. `limit` is released
         // automatically when the channel ends.
         $cc = max(1, (int) ($endpoint->sip_cc ?: 1));
-        $vars[] = '<action application="limit" data="hash ccportal_cc ' . $e($endpoint->username) . ' ' . $cc . ' !USER_BUSY"/>';
+        $vars[] = '<action application="limit" data="hash dpswitch_cc ' . $e($endpoint->username) . ' ' . $cc . ' !USER_BUSY"/>';
         // and a per-account CPS guard
-        $vars[] = '<action application="limit" data="hash ccportal_acct ' . $e($endpoint->account_id) . ' ' . max(1, (int) ($account_cc ?? config('switch.default_account_cc', 2))) . ' !USER_BUSY"/>';
+        $vars[] = '<action application="limit" data="hash dpswitch_acct ' . $e($endpoint->account_id) . ' ' . max(1, (int) ($account_cc ?? config('switch.default_account_cc', 2))) . ' !USER_BUSY"/>';
         // Absolute duration cap on EVERY call, fail-closed (F4): prepaid uses
         // its credit-bounded $maxSec; every other billing type gets the hard
         // ceiling so an unknown/postpaid account can never run unbounded.

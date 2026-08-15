@@ -1,5 +1,5 @@
 <!--
-  CommsChannel internal profile.
+  DialerPortal internal profile.
 
   Bound to 127.0.0.1:5065 ONLY. Kamailio is the public edge and has already
   authenticated the caller, so this profile does not re-challenge (auth-calls

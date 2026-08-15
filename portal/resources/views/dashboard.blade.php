@@ -3,7 +3,7 @@
 @section('content')
 
     @if(($stats['stale'] ?? true))
-        <div class="errs">Monitoring snapshot is stale ({{ $stats['age_sec'] ?? '?' }}s old) — check <code>cc-stats.timer</code>.</div>
+        <div class="errs">Monitoring snapshot is stale ({{ $stats['age_sec'] ?? '?' }}s old) — check <code>dp-stats.timer</code>.</div>
     @endif
 
     {{-- live call + today's traffic tiles --}}

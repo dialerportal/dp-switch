@@ -3,12 +3,12 @@
 banaction  = nftables-multiport
 backend    = auto
 # never lock out the operator's own addresses
-J7.0.0.1/8 ::1
+ignoreip = 127.0.0.1/8 ::1
 
-[ccportal-auth]
+[dpswitch-auth]
 enabled  = true
-filter   = ccportal-auth
-logpath  = /var/www/ccportal/storage/logs/auth-*.log
+filter   = dpswitch-auth
+logpath  = /var/www/dpswitch/storage/logs/auth-*.log
 port     = http,https
 findtime = 10m
 maxretry = 5
@@ -18,10 +18,10 @@ bantime.increment = true
 bantime.factor    = 4
 bantime.maxtime   = 90d
 
-[ccportal-probe]
+[dpswitch-probe]
 enabled  = true
-filter   = ccportal-probe
-logpath  = /var/log/nginx/ccportal_access.log
+filter   = dpswitch-probe
+logpath  = /var/log/nginx/dpswitch_access.log
 port     = http,https
 findtime = 5m
 maxretry = 20

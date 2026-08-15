@@ -6,7 +6,7 @@ bantime  = 1w
 bantime.increment = true
 maxretry  = 4
 # never ban the operator office IP
-J7.0.0.1/8 ::1
+ignoreip = 127.0.0.1/8 ::1
 
 [sshd]
 enabled = true

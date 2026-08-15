@@ -657,7 +657,7 @@ CREATE TABLE `cc_balance_ledger` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_idem` (`idempotency_key`),
   KEY `idx_account` (`account_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='CommsChannel portal: idempotent balance top-up audit ledger';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='DialerPortal portal: idempotent balance top-up audit ledger';
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -670,7 +670,7 @@ CREATE TABLE `cc_credit_holds` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_hold_uuid` (`call_uuid`),
   KEY `idx_hold_acct` (`account_id`,`created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='CommsChannel prepaid credit reservations (held at call setup, released at CDR)';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='DialerPortal prepaid credit reservations (held at call setup, released at CDR)';
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -687,7 +687,7 @@ CREATE TABLE `cc_endpoint_headers` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_ep_hdr` (`sip_username`,`header_name`),
   KEY `idx_ep` (`sip_username`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='CommsChannel: custom SIP headers injected per endpoint (consumed by the switch dialplan)';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='DialerPortal: custom SIP headers injected per endpoint (consumed by the switch dialplan)';
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;

@@ -1,5 +1,5 @@
 [Unit]
-Description=Refresh CommsChannel dashboard stats (<120s so the panel never reads stale)
+Description=Refresh DialerPortal dashboard stats (<120s so the panel never reads stale)
 [Timer]
 OnBootSec=30
 OnUnitActiveSec=60

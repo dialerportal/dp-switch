@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 232 40" role="img" aria-label="DialerPortal">
+  <g>
+    <circle cx="20" cy="20" r="17" fill="none" stroke="currentColor" stroke-opacity=".28" stroke-width="2"/>
+    <circle cx="20" cy="20" r="11" fill="none" stroke="currentColor" stroke-width="3.5"/>
+    <circle cx="20" cy="20" r="4.5" fill="#64CEFB"/>
+  </g>
+  <text x="48" y="26" font-family="system-ui,-apple-system,Segoe UI,Roboto,sans-serif"
+        font-size="19" font-weight="700" letter-spacing=".2" fill="currentColor">Dialer<tspan fill="#64CEFB">Portal</tspan></text>
+</svg>

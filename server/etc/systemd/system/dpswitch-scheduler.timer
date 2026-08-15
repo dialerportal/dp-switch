@@ -1,5 +1,5 @@
 [Unit]
-Description=Run the CommsChannel portal scheduler every minute
+Description=Run the DialerPortal portal scheduler every minute
 [Timer]
 OnCalendar=*:0/1
 AccuracySec=10s

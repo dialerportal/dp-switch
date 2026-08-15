@@ -5,7 +5,7 @@ namespace App\Models\Ov500;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * CommsChannel rated CDR. Physically in the switchcdr DB, but bound to the
+ * DialerPortal rated CDR. Physically in the switchcdr DB, but bound to the
  * 'switch' CONNECTION and referenced as a qualified cross-database table so it
  * shares one PDO — and therefore one transaction — with customer_balance and
  * cc_balance_ledger. This is the F1 fix: the idempotency guard (UNIQUE call_uuid)

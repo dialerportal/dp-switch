@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# CommsChannel SBC — one-command installer for a fresh Debian 13 (trixie) host.
+# DialerPortal DP Switch — one-command installer for a fresh Debian 13 (trixie) host.
 #
-#   curl -fsSL https://raw.githubusercontent.com/REPO_SLUG/main/install.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/dialerportal/dp-switch/main/install.sh | sudo bash
 #
 # Installs & wires: Kamailio 6.0 (public SIP edge) + FreeSWITCH 1.11 (media) +
 # Laravel portal (nginx + PHP 8.3 + MariaDB) + fail2ban + nftables + TLS.
@@ -12,12 +12,12 @@
 #
 set -euo pipefail
 
-REPO_SLUG="bilalmuhammadcommschannel/ccportal-sbc"
+REPO_SLUG="dialerportal/dp-switch"
 REPO_URL="https://github.com/${REPO_SLUG}.git"
 BRANCH="main"
-CLONE_DIR="/opt/ccportal-sbc"
-CRED_DIR="/root/.cc"
-APP_DIR="/var/www/ccportal"
+CLONE_DIR="/opt/dp-switch"
+CRED_DIR="/root/.dpswitch"
+APP_DIR="/var/www/dpswitch"
 
 c()  { printf '\033[%sm%s\033[0m\n' "$1" "$2"; }
 step(){ c "1;36" "==> $*"; }
@@ -95,14 +95,14 @@ ADMIN_PASSWORD="$(rc ADMIN_PASSWORD)";ADMIN_PASSWORD="${ADMIN_PASSWORD:-$(gen 12
 ADMIN_EMAIL="$(rc ADMIN_EMAIL)";      ADMIN_EMAIL="${ADMIN_EMAIL:-admin@${DOMAIN}}"
 APP_KEY="$(rc APP_KEY)";              APP_KEY="${APP_KEY:-base64:$(openssl rand -base64 32)}"
 cat > "$SAVED" <<EOF
-# CommsChannel SBC — first written $(date -u +%FT%TZ). KEEP PRIVATE. Reused on re-run.
+# DialerPortal DP Switch — first written $(date -u +%FT%TZ). KEEP PRIVATE. Reused on re-run.
 DOMAIN=$DOMAIN
 LE_EMAIL=$LE_EMAIL
 OPEN_SIP=$OPEN_SIP
 PORTAL_URL=https://$DOMAIN
 ADMIN_EMAIL=$ADMIN_EMAIL
 ADMIN_PASSWORD=$ADMIN_PASSWORD
-APP_DB_USER=ccportal
+APP_DB_USER=dpswitch
 APP_DB_PASS=$APP_DB_PASS
 KAM_DB_USER=kamailio
 KAM_DB_PASS=$KAM_DB_PASS
@@ -171,7 +171,7 @@ mysql() { command mariadb "$@"; }
 # CREATE ... IF NOT EXISTS + ALTER USER keeps this safe to re-run and guarantees
 # the user passwords match the (reused-on-re-run) secrets.
 mysql <<SQL
-CREATE DATABASE IF NOT EXISTS ccportal_app CHARACTER SET utf8mb4;
+CREATE DATABASE IF NOT EXISTS dpswitch_app CHARACTER SET utf8mb4;
 CREATE DATABASE IF NOT EXISTS switch;
 CREATE DATABASE IF NOT EXISTS switchcdr;
 CREATE DATABASE IF NOT EXISTS kamailio;
@@ -180,13 +180,13 @@ SQL
 # TCP 127.0.0.1, and MariaDB treats the two hosts as distinct accounts.
 for H in localhost 127.0.0.1; do
 mysql <<SQL
-CREATE USER IF NOT EXISTS 'ccportal'@'$H' IDENTIFIED BY '${APP_DB_PASS}';
-ALTER  USER 'ccportal'@'$H' IDENTIFIED BY '${APP_DB_PASS}';
+CREATE USER IF NOT EXISTS 'dpswitch'@'$H' IDENTIFIED BY '${APP_DB_PASS}';
+ALTER  USER 'dpswitch'@'$H' IDENTIFIED BY '${APP_DB_PASS}';
 CREATE USER IF NOT EXISTS 'kamailio'@'$H' IDENTIFIED BY '${KAM_DB_PASS}';
 ALTER  USER 'kamailio'@'$H' IDENTIFIED BY '${KAM_DB_PASS}';
-GRANT ALL PRIVILEGES ON ccportal_app.* TO 'ccportal'@'$H';
-GRANT SELECT,INSERT,UPDATE,DELETE ON switch.*    TO 'ccportal'@'$H';
-GRANT SELECT,INSERT,UPDATE,DELETE ON switchcdr.* TO 'ccportal'@'$H';
+GRANT ALL PRIVILEGES ON dpswitch_app.* TO 'dpswitch'@'$H';
+GRANT SELECT,INSERT,UPDATE,DELETE ON switch.*    TO 'dpswitch'@'$H';
+GRANT SELECT,INSERT,UPDATE,DELETE ON switchcdr.* TO 'dpswitch'@'$H';
 GRANT ALL PRIVILEGES ON kamailio.* TO 'kamailio'@'$H';
 FLUSH PRIVILEGES;
 SQL
@@ -204,7 +204,7 @@ load_schema() { # db, file, [render]
 }
 load_schema switch       "$REPO/database/schema-switch.sql"
 load_schema switchcdr    "$REPO/database/schema-switchcdr.sql"
-load_schema ccportal_app "$REPO/database/schema-ccportal_app.sql"
+load_schema dpswitch_app "$REPO/database/schema-dpswitch_app.sql"
 load_schema kamailio     "$REPO/database/schema-kamailio.sql" render
 # Kamailio's `version` rows are load-bearing (usrloc/auth_db abort without them)
 # and were stripped by the --no-data dump. Upsert them UNCONDITIONALLY so both a
@@ -212,7 +212,7 @@ load_schema kamailio     "$REPO/database/schema-kamailio.sql" render
 mysql kamailio < "$REPO/database/seed-kamailio-version.sql"
 # seeds: only when the target table is empty (avoids duplicate-key on re-run)
 [ "$(mysql -N -e "SELECT COUNT(*) FROM switch.sys_currencies" 2>/dev/null || echo 0)" -eq 0 ] && mysql switch < "$REPO/database/seed-currencies.sql" || true
-[ "$(mysql -N -e "SELECT COUNT(*) FROM ccportal_app.migrations" 2>/dev/null || echo 0)" -eq 0 ] && mysql ccportal_app < "$REPO/database/seed-migrations.sql" || true
+[ "$(mysql -N -e "SELECT COUNT(*) FROM dpswitch_app.migrations" 2>/dev/null || echo 0)" -eq 0 ] && mysql dpswitch_app < "$REPO/database/seed-migrations.sql" || true
 # table-specific grant AFTER the schema exists (the subscriber VIEW reads this table)
 mysql <<SQL
 GRANT SELECT ON switch.customer_sip_account TO 'kamailio'@'localhost';
@@ -231,7 +231,7 @@ mkdir -p "$APP_DIR"/storage/framework/{cache/data,sessions,views} "$APP_DIR"/sto
 # Write .env FIRST — composer's post-install 'artisan package:discover' boots the
 # framework and needs a valid .env (APP_KEY etc.) or it exits non-zero.
 cat > "$APP_DIR/.env" <<EOF
-APP_NAME="CommsChannel SBC"
+APP_NAME="DialerPortal DP Switch"
 APP_ENV=production
 APP_KEY=${APP_KEY}
 APP_DEBUG=false
@@ -242,13 +242,13 @@ LOG_LEVEL=warning
 DB_CONNECTION=mysql
 DB_HOST=127.0.0.1
 DB_PORT=3306
-DB_DATABASE=ccportal_app
-DB_USERNAME=ccportal
+DB_DATABASE=dpswitch_app
+DB_USERNAME=dpswitch
 DB_PASSWORD=${APP_DB_PASS}
 SWITCH_DB_HOST=127.0.0.1
 SWITCH_DB_PORT=3306
 SWITCH_DB_DATABASE=switch
-SWITCH_DB_USERNAME=ccportal
+SWITCH_DB_USERNAME=dpswitch
 SWITCH_DB_PASSWORD=${APP_DB_PASS}
 SWITCHCDR_DB_DATABASE=switchcdr
 SESSION_DRIVER=database
@@ -295,11 +295,11 @@ done < <(find "$REPO/server" -type f -print0)
 
 # --- nginx: enable our vhosts, drop Debian's stock default site (B1) ---
 rm -f /etc/nginx/sites-enabled/default
-ln -sf /etc/nginx/sites-available/ccportal.conf        /etc/nginx/sites-enabled/ccportal.conf
-ln -sf /etc/nginx/sites-available/ccportal-switch.conf /etc/nginx/sites-enabled/ccportal-switch.conf
+ln -sf /etc/nginx/sites-available/dpswitch.conf        /etc/nginx/sites-enabled/dpswitch.conf
+ln -sf /etc/nginx/sites-available/dpswitch-switch.conf /etc/nginx/sites-enabled/dpswitch-switch.conf
 
-# --- dashboard stats output dir (H4: cc-collect-stats mv target) ---
-install -d -m 0755 /var/lib/ccportal
+# --- dashboard stats output dir (H4: dp-collect-stats mv target) ---
+install -d -m 0755 /var/lib/dpswitch
 
 # --- FreeSWITCH profile/dialplan hygiene ---
 # Drop the IPv6 profiles (they bind [::]:5060/[::]:5080 -> collide with Kamailio /
@@ -335,22 +335,22 @@ nft -f /etc/nftables.conf || warn "nftables load reported an error — review /e
 ok "configs installed"
 
 # ---------------------------------------------------------------- TLS
-# Certs live at a STABLE path (/etc/ssl/ccportal) that nginx + kamailio read.
+# Certs live at a STABLE path (/etc/ssl/dpswitch) that nginx + kamailio read.
 # Deliberately NOT /etc/letsencrypt/live/$DOMAIN: a self-signed placeholder there
 # makes certbot refuse to issue ("live directory exists for ..."). So we place a
 # placeholder in our own dir, start nginx, let certbot issue into ITS dir, then
 # copy the real cert out to the stable path.
 step "preparing TLS for $DOMAIN"
-mkdir -p /var/www/html /etc/ssl/ccportal /etc/kamailio/tls
+mkdir -p /var/www/html /etc/ssl/dpswitch /etc/kamailio/tls
 LIVE="/etc/letsencrypt/live/$DOMAIN"
 put_certs() {   # publish fullchain, privkey, chain to the stable paths nginx+kamailio use
-    cp "$1" /etc/ssl/ccportal/fullchain.pem; cp "$2" /etc/ssl/ccportal/privkey.pem; cp "${3:-$1}" /etc/ssl/ccportal/chain.pem
+    cp "$1" /etc/ssl/dpswitch/fullchain.pem; cp "$2" /etc/ssl/dpswitch/privkey.pem; cp "${3:-$1}" /etc/ssl/dpswitch/chain.pem
     cp "$1" /etc/kamailio/tls/fullchain.pem; cp "$2" /etc/kamailio/tls/privkey.pem
-    chmod 0644 /etc/ssl/ccportal/fullchain.pem /etc/ssl/ccportal/chain.pem; chmod 0640 /etc/ssl/ccportal/privkey.pem /etc/kamailio/tls/privkey.pem
+    chmod 0644 /etc/ssl/dpswitch/fullchain.pem /etc/ssl/dpswitch/chain.pem; chmod 0640 /etc/ssl/dpswitch/privkey.pem /etc/kamailio/tls/privkey.pem
     chown -R kamailio:kamailio /etc/kamailio/tls 2>/dev/null || true
 }
 # self-signed placeholder (our dir, never certbot's) so nginx can start
-if [ ! -s /etc/ssl/ccportal/fullchain.pem ]; then
+if [ ! -s /etc/ssl/dpswitch/fullchain.pem ]; then
     tmpk="$(mktemp)"; tmpc="$(mktemp)"
     openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 90 -keyout "$tmpk" -out "$tmpc" -subj "/CN=$DOMAIN" >/dev/null 2>&1
     put_certs "$tmpc" "$tmpk" "$tmpc"; rm -f "$tmpk" "$tmpc"
@@ -377,9 +377,9 @@ fi
 install -D -m 0755 /dev/null /etc/letsencrypt/renewal-hooks/deploy/20-cc-reload.sh
 cat > /etc/letsencrypt/renewal-hooks/deploy/20-cc-reload.sh <<EOF
 #!/bin/sh
-cp "$LIVE/fullchain.pem" /etc/ssl/ccportal/fullchain.pem
-cp "$LIVE/privkey.pem"   /etc/ssl/ccportal/privkey.pem
-cp "$LIVE/chain.pem"     /etc/ssl/ccportal/chain.pem 2>/dev/null || cp "$LIVE/fullchain.pem" /etc/ssl/ccportal/chain.pem
+cp "$LIVE/fullchain.pem" /etc/ssl/dpswitch/fullchain.pem
+cp "$LIVE/privkey.pem"   /etc/ssl/dpswitch/privkey.pem
+cp "$LIVE/chain.pem"     /etc/ssl/dpswitch/chain.pem 2>/dev/null || cp "$LIVE/fullchain.pem" /etc/ssl/dpswitch/chain.pem
 cp "$LIVE/fullchain.pem" /etc/kamailio/tls/fullchain.pem
 cp "$LIVE/privkey.pem"   /etc/kamailio/tls/privkey.pem
 chown -R kamailio:kamailio /etc/kamailio/tls 2>/dev/null || true
@@ -392,12 +392,12 @@ step "enabling services"
 systemctl daemon-reload    # pick up the timer/service units the copy loop just installed
 systemctl enable --now php8.3-fpm nginx fail2ban nftables >/dev/null 2>&1 || true
 for svc in kamailio freeswitch; do systemctl enable "$svc" >/dev/null 2>&1 || true; systemctl restart "$svc" >/dev/null 2>&1 || warn "$svc did not start — check: journalctl -u $svc"; done
-for t in ccportal-scheduler.timer cc-stats.timer; do systemctl enable --now "$t" >/dev/null 2>&1 || warn "$t did not enable — check: systemctl status $t"; done
+for t in dpswitch-scheduler.timer dp-stats.timer; do systemctl enable --now "$t" >/dev/null 2>&1 || warn "$t did not enable — check: systemctl status $t"; done
 systemctl reload nginx 2>/dev/null || systemctl restart nginx || true
 
 # ---------------------------------------------------------------- done
 echo; c "1;32" "============================================================"
-c "1;32" " CommsChannel SBC installed."
+c "1;32" " DialerPortal DP Switch installed."
 c "1;32" "============================================================"
 echo "  Portal:        https://$DOMAIN"
 echo "  Admin login:   $ADMIN_EMAIL"

@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * cc_endpoint_headers — custom SIP headers to inject for an endpoint. Not part of
- * the stock OV500 schema; added by CommsChannel. The switch dialplan (api/) reads
+ * the stock OV500 schema; added by DialerPortal. The switch dialplan (api/) reads
  * these and emits sip_h_<name> variables on the relevant leg (in/out/both).
  */
 class EndpointHeader extends Model

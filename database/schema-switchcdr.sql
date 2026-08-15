@@ -32,7 +32,7 @@ CREATE TABLE `cc_rated_cdr` (
   UNIQUE KEY `uq_uuid` (`call_uuid`),
   KEY `idx_acct` (`account_id`),
   KEY `idx_rated` (`rated_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='CommsChannel rated CDRs (clean DECIMAL; Reports source)';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='DialerPortal rated CDRs (clean DECIMAL; Reports source)';
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;

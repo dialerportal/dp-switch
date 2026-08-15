@@ -1,12 +1,12 @@
 [DEFAULT]
 banaction = nftables-multiport
-J7.0.0.1/8 ::1
+ignoreip = 127.0.0.1/8 ::1
 
 # SIP auth failures / floods / malformed packets, read straight from the journal
 # (this host has no rsyslog — journald is the only log sink).
-[ccsip-auth]
+[dpsip-auth]
 enabled      = true
-filter       = ccsip-auth
+filter       = dpsip-auth
 backend      = systemd
 journalmatch = _SYSTEMD_UNIT=kamailio.service
 port         = 5060,5061
@@ -19,10 +19,10 @@ bantime.factor    = 6
 bantime.maxtime   = 90d
 
 # Extension enumeration seen at the portal's SIP directory endpoint.
-[ccsip-scanner]
+[dpsip-scanner]
 enabled  = true
-filter   = ccsip-scanner
-logpath  = /var/www/ccportal/storage/logs/auth-*.log
+filter   = dpsip-scanner
+logpath  = /var/www/dpswitch/storage/logs/auth-*.log
 port     = 5060,5061
 protocol = all
 findtime = 10m

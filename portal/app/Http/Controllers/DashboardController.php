@@ -10,13 +10,13 @@ use Illuminate\Support\Facades\DB;
  * Operations dashboard: live calls, today's traffic/revenue, and (admin only)
  * platform + security posture.
  *
- * Security stats come from /var/lib/ccportal/stats.json, written by a root
- * systemd timer (cc-stats.timer). The web process deliberately has no
+ * Security stats come from /var/lib/dpswitch/stats.json, written by a root
+ * systemd timer (dp-stats.timer). The web process deliberately has no
  * fail2ban/fs_cli privileges — it only reads that snapshot.
  */
 class DashboardController extends Controller
 {
-    private const STATS_FILE = '/var/lib/ccportal/stats.json';
+    private const STATS_FILE = '/var/lib/dpswitch/stats.json';
 
     public function index(Request $request)
     {
