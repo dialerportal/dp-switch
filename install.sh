@@ -34,6 +34,7 @@ while [ $# -gt 0 ]; do case "$1" in
     --email) LE_EMAIL="$2"; shift 2;;
     --signalwire-token) SIGNALWIRE_TOKEN="$2"; shift 2;;
     --open-sip) OPEN_SIP=yes; shift;;
+    --no-open-sip) OPEN_SIP=no; shift;;
     *) shift;;
 esac; done
 
@@ -46,14 +47,22 @@ if [ -f "$SAVED" ]; then
     [ -n "$OPEN_SIP" ] || OPEN_SIP="$(grep -E '^OPEN_SIP=' "$SAVED" | cut -d= -f2-)"
 fi
 
-ask()    { local p="$1" d="${2:-}" v; if [ -n "$d" ]; then read -rp "$p [$d]: " v </dev/tty || true; echo "${v:-$d}"; else read -rp "$p: " v </dev/tty || true; echo "$v"; fi; }
-asksec() { local p="$1" v; read -rsp "$p: " v </dev/tty || true; echo >/dev/tty; echo "$v"; }   # hidden entry for tokens
+# Unattended runs (nohup, cron, `| bash` from a pipe) have no controlling
+# terminal: reading /dev/tty there fails loudly and returns nothing. Detect that
+# once, so a missing answer becomes a clear error or a documented default rather
+# than a "No such device or address" line followed by an empty value.
+have_tty() { [ -e /dev/tty ] && { : </dev/tty; } 2>/dev/null; }
+ask()    { local p="$1" d="${2:-}" v; have_tty || { echo "$d"; return; }; if [ -n "$d" ]; then read -rp "$p [$d]: " v </dev/tty || true; echo "${v:-$d}"; else read -rp "$p: " v </dev/tty || true; echo "$v"; fi; }
+asksec() { local p="$1" v; have_tty || { echo ""; return; }; read -rsp "$p: " v </dev/tty || true; echo >/dev/tty; echo "$v"; }   # hidden entry for tokens
 
 # Prompt for anything still unknown, BEFORE cloning, so the re-exec never re-asks.
 [ -n "$DOMAIN" ]           || DOMAIN="$(ask 'SIP + portal domain (e.g. sbc.example.com)')"
 [ -n "$LE_EMAIL" ]         || LE_EMAIL="$(ask 'Email for Lets Encrypt / expiry notices')"
 [ -n "$SIGNALWIRE_TOKEN" ] || SIGNALWIRE_TOKEN="$(asksec 'SignalWire access token (free from signalwire.com; for the FreeSWITCH repo)')"
-if [ -z "$OPEN_SIP" ]; then a="$(ask 'Open SIP (5060/5061/RTP) to the public internet now? y/N' 'N')"; [ "${a,,}" = y ] && OPEN_SIP=yes || OPEN_SIP=no; fi
+if [ -z "$OPEN_SIP" ]; then
+    if have_tty; then a="$(ask 'Open SIP (5060/5061/RTP) to the public internet now? y/N' 'N')"; [ "${a,,}" = y ] && OPEN_SIP=yes || OPEN_SIP=no
+    else OPEN_SIP=no; warn "no terminal to ask about public SIP — defaulting to closed (pass --open-sip to change)"; fi
+fi
 [ -n "$DOMAIN" ] || die "domain is required."
 [ -n "$SIGNALWIRE_TOKEN" ] || die "SignalWire token is required for FreeSWITCH."
 export DOMAIN LE_EMAIL SIGNALWIRE_TOKEN OPEN_SIP
@@ -68,9 +77,14 @@ if [ -z "${SELF_DIR}" ] || [ ! -d "${SELF_DIR}/server" ]; then
     export DEBIAN_FRONTEND=noninteractive
     # Only touch apt if git is actually missing — avoids re-tripping any stale
     # third-party repo error just to fetch a tool that's usually already present.
+    # NB: do NOT try to narrow this update with `-o Dir::Etc::sourceparts=/dev/null`.
+    # Debian 13 ships no /etc/apt/sources.list at all — every repo is a deb822
+    # file under /etc/apt/sources.list.d/ — so that option leaves apt with zero
+    # sources, `update` still exits 0, and the install then fails with
+    # "Unable to locate package git".
     if ! command -v git >/dev/null 2>&1; then
-        apt-get update -qq -o Dir::Etc::sourceparts=/dev/null -o APT::Get::List-Cleanup=0 || apt-get update -qq || true
-        apt-get install -y -qq git >/dev/null
+        apt-get update -qq || die "apt-get update failed — cannot fetch git to clone the installer repo."
+        apt-get install -y -qq git >/dev/null || die "could not install git — see the apt output above."
     fi
     if [ -d "${CLONE_DIR}/.git" ]; then git -C "${CLONE_DIR}" pull -q || true; else git clone -q --depth 1 -b "${BRANCH}" "${REPO_URL}" "${CLONE_DIR}"; fi
     exec bash "${CLONE_DIR}/install.sh"
