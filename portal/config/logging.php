@@ -54,11 +54,15 @@ return [
 
         // Dedicated auth log: single-line entries fail2ban parses for the source IP.
         // Separate from the app log so noisy app errors cannot mask or trigger bans.
+        // NB: 'single', not 'daily'. The daily driver writes auth-YYYY-MM-DD.log, and
+        // fail2ban resolves its logpath glob once at startup — so at the first midnight
+        // rollover both jails that read this file would keep watching yesterday's name
+        // and silently stop banning. A stable filename (rotated by logrotate with
+        // copytruncate, which preserves the inode) keeps them following it.
         'auth' => [
-            'driver' => 'daily',
+            'driver' => 'single',
             'path' => storage_path('logs/auth.log'),
             'level' => 'debug',
-            'days' => 90,
             'permission' => 0640,
         ],
 

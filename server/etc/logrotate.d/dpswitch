@@ -1,0 +1,26 @@
+# copytruncate is deliberate: fail2ban follows this file by inode, so the usual
+# rename-and-create rotation would leave both portal/SIP jails watching a rotated
+# file forever. Truncating in place keeps them on the live log.
+/var/www/dpswitch/storage/logs/auth.log {
+    daily
+    rotate 90
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    su www-data www-data
+    create 0640 www-data www-data
+}
+
+/var/www/dpswitch/storage/logs/laravel.log {
+    weekly
+    rotate 12
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    su www-data www-data
+    create 0640 www-data www-data
+}

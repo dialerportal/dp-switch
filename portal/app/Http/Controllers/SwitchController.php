@@ -37,7 +37,13 @@ class SwitchController extends Controller
             return $this->xml($this->notFound());
         }
 
-        $destination = $this->digits((string) $request->input('destination_number', $request->input('Caller-Destination-Number', '')));
+        // Keep the dialled string exactly as FreeSWITCH sent it as well as the
+        // digits-only form. Rating, LCR and the blocklist all work on digits, but the
+        // dialplan <condition> we hand back is matched by FreeSWITCH against its own
+        // raw destination_number — so anchoring that condition on the stripped copy
+        // silently fails to match anything dialled as E.164 (+61...) or with * / #.
+        $rawDestination = (string) $request->input('destination_number', $request->input('Caller-Destination-Number', ''));
+        $destination = $this->digits($rawDestination);
         // Kamailio (the public edge) authenticates the caller and asserts the identity
         // in X-CC-User. It strips any client-supplied copy first, and FreeSWITCH's
         // internal profile is loopback-only, so this header is trustworthy here.
@@ -108,7 +114,7 @@ class SwitchController extends Controller
         $headers = EndpointHeader::where('sip_username', $endpoint->username)
             ->whereIn('direction', ['outbound', 'both'])->get();
 
-        return $this->xml($this->routeXml($endpoint, $carrier, $gateway, $dialled, $headers, $maxSec, $ratecardId, $destination, $callKey, (int) ($account->account_cc ?? 0) ?: null));
+        return $this->xml($this->routeXml($endpoint, $carrier, $gateway, $dialled, $headers, $maxSec, $ratecardId, $destination, $callKey, (int) ($account->account_cc ?? 0) ?: null, $rawDestination));
     }
 
 
@@ -508,10 +514,17 @@ class SwitchController extends Controller
 XML;
     }
 
-    private function routeXml($endpoint, Carrier $carrier, object $gw, string $dialled, $headers, ?int $maxSec, ?string $ratecardId, string $origDest, string $callKey, ?int $account_cc = null): string
+    private function routeXml($endpoint, Carrier $carrier, object $gw, string $dialled, $headers, ?int $maxSec, ?string $ratecardId, string $origDest, string $callKey, ?int $account_cc = null, string $rawDest = ''): string
     {
         $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES | ENT_XML1);
         $gwHost = $e($gw->ipaddress);
+        // FreeSWITCH matches this condition against the destination_number it holds,
+        // which is the untouched R-URI user Kamailio relayed — not our digits-only
+        // copy. Anchor on the raw string, regex-escaped (it can legitimately contain
+        // +, * or #, all of which are regex metacharacters). Fall back to the digits
+        // form only when FreeSWITCH sent us nothing to match on.
+        $matchOn = $rawDest !== '' ? $rawDest : $origDest;
+        $destRe  = $e(preg_quote($matchOn, '/'));
         // Per-leg channel variables in [ ] apply to the outbound leg only. Enforce
         // the carrier's agreed codec list there (carrier.carrier_codecs) so the
         // termination leg offers exactly what that carrier accepts — without this
@@ -577,7 +590,7 @@ XML;
   <section name="dialplan">
     <context name="default">
       <extension name="cc_outbound">
-        <condition field="destination_number" expression="^{$e($origDest)}$">
+        <condition field="destination_number" expression="^{$destRe}$">
           $varsXml
           <action application="bridge" data="$directBridge"/>
         </condition>

@@ -167,7 +167,7 @@ apt-get install -y \
     php8.3-fpm php8.3-cli php8.3-mysql php8.3-mbstring php8.3-xml php8.3-curl php8.3-bcmath php8.3-zip php8.3-intl php8.3-gd \
     kamailio kamailio-mysql-modules kamailio-tls-modules \
     freeswitch-meta-all freeswitch-conf-vanilla \
-    certbot fail2ban nftables composer jq || die "package install failed — see apt output above."
+    certbot fail2ban nftables composer jq sudo logrotate || die "package install failed — see apt output above."
 # our FreeSWITCH overlay references vanilla macros ($${domain}, loopback.auto, etc.) —
 # the base config must be present or FreeSWITCH won't parse its XML at all.
 [ -f /etc/freeswitch/freeswitch.xml ] && [ -f /etc/freeswitch/vars.xml ] || die "FreeSWITCH base config (freeswitch-config-vanilla) missing"
@@ -291,12 +291,13 @@ sudo -u www-data HOME=/tmp COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev 
 # db:seed must NOT be swallowed — a silent failure = no admin account on a green banner.
 sudo -u www-data HOME=/tmp php8.3 artisan db:seed --class=AdminUserSeeder --force || die "admin seed failed — check DB grants / users table"
 sudo -u www-data HOME=/tmp php8.3 artisan config:cache -q
-# The 'auth' log channel is a daily driver, so it writes storage/logs/auth-YYYY-MM-DD.log
-# only once something actually authenticates. fail2ban resolves its logpath GLOB at
-# startup and aborts the whole jail set with "Have not found any log file for
-# dpswitch-auth jail" if nothing matches — which silently left every portal/SIP jail
-# unloaded while the install reported success. Seed today's file so the glob resolves.
-install -o www-data -g www-data -m 0640 /dev/null "$APP_DIR/storage/logs/auth-$(date +%F).log"
+# The 'auth' log only appears once something authenticates, but fail2ban resolves its
+# logpath at startup and aborts the WHOLE jail set with "Have not found any log file
+# for dpswitch-auth jail" if it is missing — which silently left every portal/SIP jail
+# unloaded while the install still reported success. Seed it. Never truncate it on a
+# re-run: that would erase the very evidence the jails ban on.
+[ -f "$APP_DIR/storage/logs/auth.log" ] \
+    || install -o www-data -g www-data -m 0640 /dev/null "$APP_DIR/storage/logs/auth.log"
 ok "portal deployed"
 
 # ---------------------------------------------------------------- server configs
@@ -320,6 +321,19 @@ ln -sf /etc/nginx/sites-available/dpswitch-switch.conf /etc/nginx/sites-enabled/
 
 # --- dashboard stats output dir (H4: dp-collect-stats mv target) ---
 install -d -m 0755 /var/lib/dpswitch
+
+# --- fs_cli credentials (root-only) ---
+# event_socket.conf.xml is generated with a random ESL password, but dp-collect-stats
+# (and any operator) calls plain `fs_cli -x ...` with no -p. Without this file every
+# such call fails auth and the collector silently reports 0 calls / 0 channels
+# forever, so the dashboard's live-call panel is permanently empty.
+install -D -m 0600 /dev/null /etc/fs_cli.conf
+cat > /etc/fs_cli.conf <<EOF
+[default]
+host     => 127.0.0.1
+port     => 8021
+password => ${ESL_PASSWORD}
+EOF
 
 # --- FreeSWITCH profile/dialplan hygiene ---
 # Drop the IPv6 profiles (they bind [::]:5060/[::]:5080 -> collide with Kamailio /

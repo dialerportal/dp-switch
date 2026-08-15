@@ -8,7 +8,7 @@ ignoreip = 127.0.0.1/8 ::1
 [dpswitch-auth]
 enabled  = true
 filter   = dpswitch-auth
-logpath  = /var/www/dpswitch/storage/logs/auth-*.log
+logpath  = /var/www/dpswitch/storage/logs/auth.log
 port     = http,https
 findtime = 10m
 maxretry = 5

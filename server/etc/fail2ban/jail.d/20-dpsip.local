@@ -10,7 +10,7 @@ filter       = dpsip-auth
 backend      = systemd
 journalmatch = _SYSTEMD_UNIT=kamailio.service
 port         = 5060,5061
-protocol     = all
+protocol     = tcp,udp
 findtime     = 10m
 maxretry     = 5
 bantime  = 1w
@@ -22,9 +22,9 @@ bantime.maxtime   = 90d
 [dpsip-scanner]
 enabled  = true
 filter   = dpsip-scanner
-logpath  = /var/www/dpswitch/storage/logs/auth-*.log
+logpath  = /var/www/dpswitch/storage/logs/auth.log
 port     = 5060,5061
-protocol = all
+protocol = tcp,udp
 findtime = 10m
 maxretry = 4
 bantime  = 1w
