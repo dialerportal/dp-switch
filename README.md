@@ -1,11 +1,29 @@
 <p align="center">
-  <img src="portal/public/brand/dialerportal-logo-256.png" width="96" alt="DialerPortal">
+  <a href="https://dialerportal.com">
+    <img src="portal/public/brand/dialerportal-logo-256.png" width="96" alt="DialerPortal — VoIP billing and session border control">
+  </a>
 </p>
 
-<h1 align="center">DialerPortal · DP Switch</h1>
+<h1 align="center"><a href="https://dialerportal.com">DialerPortal</a> · DP Switch</h1>
 
 <p align="center">
-  Session border controller + billing portal, installed on a fresh Debian 13 host with one command.
+  Session border controller + billing portal, installed on a fresh Debian 13 host with one command.<br>
+  An open-source component of the <a href="https://dialerportal.com">DialerPortal</a> VoIP platform.
+</p>
+
+<p align="center">
+  <a href="https://dialerportal.com"><img src="https://img.shields.io/badge/website-dialerportal.com-0b6fa4?style=flat-square" alt="DialerPortal website"></a>
+  <a href="https://github.com/dialerportal/dp-switch"><img src="https://img.shields.io/badge/source-dp--switch-24292e?style=flat-square&logo=github" alt="dp-switch on GitHub"></a>
+  <a href="https://github.com/dialerportal/dp-switch/issues"><img src="https://img.shields.io/badge/support-issues-64CEFB?style=flat-square" alt="Report an issue"></a>
+</p>
+
+<p align="center">
+  <a href="https://dialerportal.com">Website</a> ·
+  <a href="#install-one-command">Install</a> ·
+  <a href="#what-it-does">How it works</a> ·
+  <a href="#after-install">After install</a> ·
+  <a href="#security-notes">Security</a> ·
+  <a href="https://github.com/dialerportal/dp-switch/issues">Support</a>
 </p>
 
 ---
@@ -17,7 +35,7 @@
 
 ## Install (one command)
 
-On a **fresh Debian 13 (trixie)** server, as root:
+On a **fresh Debian 13 (trixie)** server, as root. Managed hosting and support for this stack are available from [DialerPortal](https://dialerportal.com).
 
 ```bash
 curl -O https://raw.githubusercontent.com/dialerportal/dp-switch/main/install.sh
@@ -52,7 +70,7 @@ bash install.sh --domain sbc.example.com --email you@example.com \
 5. Renders every server config from templates (your domain, the server's own public IP, the generated secrets) and applies firewall + hardening.
 6. Obtains a Let's Encrypt certificate (self-signed fallback if DNS isn't live yet).
 
-At the end it prints the portal URL and the generated admin login.
+At the end it prints the portal URL and the generated admin login. For a walkthrough of the platform this installs, see [dialerportal.com](https://dialerportal.com).
 
 ## Where things land
 
@@ -66,6 +84,8 @@ At the end it prints the portal URL and the generated admin login.
 | `dpswitch-auth`, `dpswitch-probe`, `dpsip-auth`, `dpsip-scanner` | fail2ban jails |
 
 ## After install
+
+If you would rather not run your own switch, [DialerPortal](https://dialerportal.com) offers the same stack as a managed service.
 
 - **Log in and change the admin password immediately.**
 - Add a carrier: `nft add element inet filter carrier_v4 { <carrier-ip> }` (and create it in the portal).
@@ -81,7 +101,7 @@ At the end it prints the portal URL and the generated admin login.
 
 ## Brand assets
 
-`portal/public/brand/` holds the DialerPortal mark used by the portal chrome:
+`portal/public/brand/` holds the [DialerPortal](https://dialerportal.com) mark used by the portal chrome. The marks are property of [DialerPortal](https://dialerportal.com); replace them if you deploy this under your own brand.
 
 | File | Use |
 |---|---|
@@ -95,3 +115,16 @@ Palette: ink `#0d1117`, accent `#64CEFB`, action `#0b6fa4`.
 ## Requirements
 
 Fresh Debian 13 (trixie), root access, a domain with DNS pointing at the host, and a SignalWire token. ~2 vCPU / 2 GB RAM minimum.
+
+---
+
+<p align="center">
+  Built and maintained by <a href="https://dialerportal.com"><strong>DialerPortal</strong></a> — VoIP billing, session border control and dialer infrastructure.
+</p>
+
+<p align="center">
+  <a href="https://dialerportal.com">dialerportal.com</a> ·
+  <a href="https://github.com/dialerportal/dp-switch">Source</a> ·
+  <a href="https://github.com/dialerportal/dp-switch/issues">Report an issue</a> ·
+  <a href="https://github.com/dialerportal/dp-switch/blob/main/install.sh">install.sh</a>
+</p>
