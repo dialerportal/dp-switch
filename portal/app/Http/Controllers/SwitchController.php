@@ -97,24 +97,39 @@ class SwitchController extends Controller
             }
         }
 
-        // 4. choose a termination carrier by least-cost among active OUTBOUND carriers
-        $carrier = $this->selectCarrier($destination);
-        if (! $carrier) {
+        // 4. build a ranked FAILOVER list: cheapest carrier first, each with its own
+        //    endpoints. A single bridge target means one carrier reject kills the
+        //    call; with a chain, FreeSWITCH rolls to the next automatically.
+        $carriers = $this->selectCarriers($destination, (int) config('switch.failover_carriers', 4));
+        if (! $carriers) {
             return $this->xml($this->reject('NO_ROUTE_DESTINATION', 'no carrier'));
         }
-        $gateway = $this->carrierGateway($carrier);
-        if (! $gateway) {
+        $maxLegs   = (int) config('switch.failover_max_legs', 5);
+        $candidates = [];
+        foreach ($carriers as $c) {
+            foreach ($this->carrierGateways($c) as $g) {
+                // digit manipulation is PER CARRIER, so each leg dials its own string
+                $candidates[] = [
+                    'carrier' => $c,
+                    'gw'      => $g,
+                    'dialled' => $this->applyDigitManip($c->carrier_id, $destination),
+                ];
+                if (count($candidates) >= $maxLegs) break 2;
+            }
+        }
+        if (! $candidates) {
             return $this->xml($this->reject('NO_ROUTE_DESTINATION', 'carrier has no endpoint'));
         }
-
-        // 5. digit manipulation for the chosen carrier (carrier_prefix rules)
-        $dialled = $this->applyDigitManip($carrier->carrier_id, $destination);
+        // first candidate stays the "primary" for the A-leg billing vars
+        $carrier = $candidates[0]['carrier'];
+        $gateway = $candidates[0]['gw'];
+        $dialled = $candidates[0]['dialled'];
 
         // 6. custom SIP headers for this endpoint
         $headers = EndpointHeader::where('sip_username', $endpoint->username)
             ->whereIn('direction', ['outbound', 'both'])->get();
 
-        return $this->xml($this->routeXml($endpoint, $carrier, $gateway, $dialled, $headers, $maxSec, $ratecardId, $destination, $callKey, (int) ($account->account_cc ?? 0) ?: null, $rawDestination));
+        return $this->xml($this->routeXml($endpoint, $carrier, $gateway, $dialled, $headers, $maxSec, $ratecardId, $destination, $callKey, (int) ($account->account_cc ?? 0) ?: null, $rawDestination, $candidates));
     }
 
 
@@ -401,6 +416,65 @@ class SwitchController extends Controller
     }
 
     /** Least-cost active OUTBOUND carrier whose carrier_rates has a matching prefix. */
+    /**
+     * Ranked termination candidates, cheapest first — the basis of carrier failover.
+     * Mirrors selectCarrier()'s join exactly, but returns up to $limit DISTINCT
+     * carriers instead of only the best, so a reject on the cheapest can roll to
+     * the next one instead of failing the call.
+     */
+    private function selectCarriers(string $destination, int $limit = 4): array
+    {
+        // No GROUP BY: Laravel enables ONLY_FULL_GROUP_BY on the connection, which
+        // rejects "select carrier.* ... group by carrier_id". Pull the matching rates
+        // cheapest-first and keep the first sighting of each carrier instead.
+        $rows = DB::connection('switch')->table('carrier')
+            ->join('tariff_ratecard_map as trm', function ($j) {
+                $j->on('trm.tariff_id', '=', 'carrier.tariff_id')->where('trm.status', '1');
+            })
+            ->join('carrier_rates as cr', function ($j) {
+                $j->on('cr.ratecard_id', '=', 'trm.ratecard_id')->where('cr.rates_status', '1');
+            })
+            ->where('carrier.carrier_status', 1)
+            ->where('carrier.carrier_type', 'OUTBOUND')
+            ->whereRaw('? LIKE CONCAT(cr.prefix, "%")', [$destination])
+            ->orderBy('cr.rate')
+            ->orderByRaw('CHAR_LENGTH(cr.prefix) DESC')
+            ->select('carrier.*')
+            ->limit(200)->get();
+
+        $out = [];
+        $seen = [];
+        foreach ($rows as $r) {
+            if (isset($seen[$r->carrier_id])) { continue; }
+            $seen[$r->carrier_id] = true;
+            $out[] = Carrier::hydrate([(array) $r])->first();
+            if (count($out) >= $limit) { break; }
+        }
+        if ($out) return $out;
+
+        $default = (string) config('switch.default_carrier_id');
+        if ($default !== '') {
+            $c = Carrier::where('carrier_id', $default)->where('carrier_status', 1)->first();
+            if ($c) return [$c];
+        }
+        return [];
+    }
+
+    /**
+     * Every usable endpoint for a carrier, best first. Ordered by priority then by
+     * load_share DESC so the weights stored on carrier_ips actually influence which
+     * IP is tried first (TACIT's three peers, Twilio's fifteen).
+     */
+    private function carrierGateways(Carrier $carrier, int $limit = 3): array
+    {
+        return DB::connection('switch')->table('carrier_ips')
+            ->where('carrier_id', $carrier->carrier_id)
+            ->where('ip_status', '1')
+            ->whereNotNull('ipaddress')->where('ipaddress', '<>', '')
+            ->orderBy('priority')->orderByDesc('load_share')
+            ->limit($limit)->get()->all();
+    }
+
     private function selectCarrier(string $destination): ?Carrier
     {
         // carrier -> tariff_ratecard_map (its CARRIER tariff) -> carrier_rates on the mapped ratecard
@@ -514,7 +588,7 @@ class SwitchController extends Controller
 XML;
     }
 
-    private function routeXml($endpoint, Carrier $carrier, object $gw, string $dialled, $headers, ?int $maxSec, ?string $ratecardId, string $origDest, string $callKey, ?int $account_cc = null, string $rawDest = ''): string
+    private function routeXml($endpoint, Carrier $carrier, object $gw, string $dialled, $headers, ?int $maxSec, ?string $ratecardId, string $origDest, string $callKey, ?int $account_cc = null, string $rawDest = '', array $candidates = []): string
     {
         $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES | ENT_XML1);
         $gwHost = $e($gw->ipaddress);
@@ -530,15 +604,38 @@ XML;
         // termination leg offers exactly what that carrier accepts — without this
         // the B-leg inherits whatever the A-leg negotiated and can fail with
         // INCOMPATIBLE_DESTINATION.
-        $legVars = '';
-        $codecs = trim((string) $carrier->carrier_codecs);
-        if ($codecs !== '') {
-            $safe = preg_replace('/[^A-Za-z0-9,.@]/', '', $codecs);
-            if ($safe !== '') {
-                $legVars = "[absolute_codec_string='{$e($safe)}']";
-            }
+        // FAILOVER CHAIN. '|' makes FreeSWITCH try each target in turn until one
+        // answers, so a reject/timeout from the cheapest carrier rolls to the next
+        // instead of killing the call. Each leg carries its own:
+        //   absolute_codec_string - carriers accept different codecs
+        //   cc_carrier_id         - the CDR must name the carrier that ANSWERED,
+        //                           not the one we tried first
+        //   leg_timeout           - bounds post-dial delay per attempt
+        if (! $candidates) {
+            $candidates = [['carrier' => $carrier, 'gw' => $gw, 'dialled' => $dialled]];
         }
-        $directBridge = "{$legVars}sofia/external/{$e($dialled)}@{$gwHost}";
+        $defLegTo = max(10, (int) config('switch.failover_leg_timeout', 30));
+        $targets  = [];
+        foreach ($candidates as $cand) {
+            $cc  = $cand['carrier'];
+            $cgw = $cand['gw'];
+            $host = trim((string) $cgw->ipaddress);
+            if ($host === '') { continue; }
+            $lv = [];
+            $codecs = preg_replace('/[^A-Za-z0-9,.@]/', '', trim((string) $cc->carrier_codecs));
+            if ($codecs !== '') { $lv[] = "absolute_codec_string='{$e($codecs)}'"; }
+            $lv[] = "cc_carrier_id='" . $e($cc->carrier_id) . "'";
+            // Two DIFFERENT timers, and conflating them breaks calls:
+            //   progress_timeout - no 18x within N s => carrier is dead, fail over FAST
+            //   leg_timeout      - no answer within N s => the CALLEE did not pick up,
+            //                      which is a real result, not a carrier fault
+            $progTo = (int) ($cc->carrier_progress_timeout ?: 0);
+            $ringTo = (int) ($cc->carrier_ring_timeout ?: 0);
+            $lv[] = 'progress_timeout=' . ($progTo > 0 ? $progTo : 6);
+            $lv[] = 'leg_timeout=' . ($ringTo > 0 ? $ringTo : $defLegTo);
+            $targets[] = '[' . implode(',', $lv) . ']sofia/external/' . $e($cand['dialled']) . '@' . $e($host);
+        }
+        $directBridge = implode('|', $targets);
 
         // 'export' (not 'set') so the billing variables propagate to the outbound
         // leg as well — whichever leg mod_xml_cdr reports must carry them, or the
@@ -558,6 +655,10 @@ XML;
         // UNIQUE(call_uuid) collapses them to a single rated CDR and one debit.
         $vars[] = '<action application="export" data="cc_call_key=' . $e($callKey) . '"/>';
         $vars[] = '<action application="set" data="hangup_after_bridge=true"/>';
+        // Do not abort the '|' chain on the first rejection; let it walk the list.
+        // (USER_BUSY / NO_ANSWER are the caller's answer, so those stop it.)
+        $vars[] = '<action application="set" data="continue_on_fail=true"/>';
+        $vars[] = '<action application="set" data="fail_on_single_reject=USER_BUSY,NO_ANSWER,NORMAL_CLEARING"/>';
         // Enforce the endpoint's concurrent-call ceiling (customer_sip_account.sip_cc).
         // Stored but never applied before — on a public SIP port a stolen credential
         // could otherwise open unlimited simultaneous calls. `limit` is released

@@ -50,6 +50,25 @@
         .muted{color:#5f6368}.right{text-align:right}
         .rowbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
         .ipset{border:1px dashed #cfdae4;border-radius:6px;padding:14px;margin-bottom:10px}
+    
+        /* --- pagination -------------------------------------------------
+           Paginator::useBootstrapFive() (AppServiceProvider) makes Laravel emit
+           ul.pagination / li.page-item / a.page-link with TEXT arrows instead of
+           the Tailwind view's <svg class="w-5 h-5">, which rendered full-size
+           here because this app loads no Tailwind. No Bootstrap CSS is loaded
+           either, so the minimal styling below stands on its own. */
+        ul.pagination { display:flex; align-items:center; gap:6px; flex-wrap:wrap;
+                        list-style:none; margin:0; padding:0; font-size:13px; }
+        ul.pagination .page-link {
+            display:inline-flex; align-items:center; justify-content:center;
+            min-width:32px; height:32px; padding:0 9px;
+            border:1px solid #cfdae4; border-radius:6px;
+            text-decoration:none; color:#1f2a37; background:#fff; line-height:1;
+        }
+        ul.pagination .page-link:hover { background:#eef4f9; }
+        ul.pagination .active .page-link { background:#0b6fa4; border-color:#0b6fa4; color:#fff; font-weight:600; }
+        ul.pagination .disabled .page-link { opacity:.45; pointer-events:none; }
+        .pagination-sm-text, nav p.small { margin:0 0 6px; color:#5f6368; font-size:12px; }
     </style>
 </head>
 <body>
