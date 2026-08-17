@@ -76,15 +76,11 @@ CREATE TABLE `active_watchers` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
-CREATE TABLE `address` (
-  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `grp` int(11) unsigned NOT NULL DEFAULT 1,
-  `ip_addr` varchar(50) NOT NULL,
-  `mask` int(11) NOT NULL DEFAULT 32,
-  `port` smallint(5) unsigned NOT NULL DEFAULT 0,
-  `tag` varchar(64) DEFAULT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+-- `address` is a VIEW over switch.customer_sip_account, not a table -- see the
+-- view definition at the end of this file. The permissions module reads it to
+-- decide which source IPs may skip the digest challenge, so IP-authenticated
+-- customers are driven by the same portal data as everything else and there is
+-- no second table to keep in sync. (Mirrors how `subscriber` works.)
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -1110,6 +1106,19 @@ CREATE TABLE `xcap` (
 /*!50001 CREATE ALGORITHM=UNDEFINED */
 /*!50013 SQL SECURITY INVOKER */
 /*!50001 VIEW `subscriber` AS select `a`.`id` AS `id`,`a`.`username` AS `username`,'__DOMAIN__' AS `domain`,`a`.`secret` AS `password`,'' AS `email_address`,'' AS `ha1`,'' AS `ha1b`,NULL AS `rpid` from `switch`.`customer_sip_account` `a` where `a`.`status` = '1' */;
+/*!50001 SET character_set_client      = @saved_cs_client */;
+/*!50001 SET character_set_results     = @saved_cs_results */;
+/*!50001 SET collation_connection      = @saved_col_connection */;
+/*!50001 DROP VIEW IF EXISTS `address`*/;
+/*!50001 SET @saved_cs_client          = @@character_set_client */;
+/*!50001 SET @saved_cs_results         = @@character_set_results */;
+/*!50001 SET @saved_col_connection     = @@collation_connection */;
+/*!50001 SET character_set_client      = utf8mb4 */;
+/*!50001 SET character_set_results     = utf8mb4 */;
+/*!50001 SET collation_connection      = utf8mb4_uca1400_ai_ci */;
+/*!50001 CREATE ALGORITHM=UNDEFINED */
+/*!50013 SQL SECURITY INVOKER */
+/*!50001 VIEW `address` AS select `a`.`id` AS `id`,1 AS `grp`,`a`.`ipaddress` AS `ip_addr`,32 AS `mask`,0 AS `port`,`a`.`account_id` AS `tag` from `switch`.`customer_sip_account` `a` where `a`.`status` = '1' and `a`.`ipauthfrom` in ('SRC','FROM') and `a`.`ipaddress` is not null and `a`.`ipaddress` <> '' */;
 /*!50001 SET character_set_client      = @saved_cs_client */;
 /*!50001 SET character_set_results     = @saved_cs_results */;
 /*!50001 SET collation_connection      = @saved_col_connection */;

@@ -233,6 +233,21 @@ GRANT SELECT ON switch.customer_sip_account TO 'kamailio'@'localhost';
 GRANT SELECT ON switch.customer_sip_account TO 'kamailio'@'127.0.0.1';
 FLUSH PRIVILEGES;
 SQL
+# The `address` view is load-bearing: without it the permissions module has no
+# trusted-IP list, every IP-authenticated customer is digest-challenged, cannot
+# answer, and fails with a 407 that route[AUTH] never logs. load_schema skips a
+# database that already has tables, so define it UNCONDITIONALLY here (same
+# reasoning as the kamailio `version` rows above) to heal upgrades as well as
+# fresh installs.
+mysql kamailio <<'SQL'
+DROP TABLE IF EXISTS address;
+CREATE OR REPLACE SQL SECURITY INVOKER VIEW address AS
+  SELECT a.id AS id, 1 AS grp, a.ipaddress AS ip_addr, 32 AS mask, 0 AS port,
+         a.account_id AS tag
+  FROM switch.customer_sip_account a
+  WHERE a.status = '1' AND a.ipauthfrom IN ('SRC','FROM')
+    AND a.ipaddress IS NOT NULL AND a.ipaddress <> '';
+SQL
 ok "databases ready"
 
 # ---------------------------------------------------------------- portal
